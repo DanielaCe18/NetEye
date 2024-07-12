@@ -41,6 +41,12 @@ struct NmapRun {
     hosts: Vec<NmapHost>,
 }
 
+#[derive(ArgEnum, Clone)]
+enum Protocol {
+    Tcp,
+    Udp,
+}
+
 fn run_nmap(address: &str, outdir: &str, srvname: &str, nmapparams: &str, ports: &str, protocol: Protocol) -> Vec<(String, i32, String)> {
     let out = format!("{}/{}{}", outdir, address, srvname);
     let scan_type = match protocol {
@@ -225,10 +231,247 @@ fn enum_http(address: &str, port: u16, service: &str, basedir: &str) {
     }
 }
 
-#[derive(ArgEnum, Clone)]
-enum Protocol {
-    Tcp,
-    Udp,
+fn enum_smtp(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(smtp*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_smtp_nmap.txt\" -oX \"{}/{}_smtp_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_pop3(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(pop3*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_pop3_nmap.txt\" -oX \"{}/{}_pop3_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_imap(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(imap*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_imap_nmap.txt\" -oX \"{}/{}_imap_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_ftp(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(ftp*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_ftp_nmap.txt\" -oX \"{}/{}_ftp_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_smb(address: &str, port: u16, basedir: &str) {
+    let nmap_port = if port == 139 || port == 445 {
+        "139,445"
+    } else {
+        &port.to_string()
+    };
+
+    let cmds = vec![
+        format!(
+            "nmap -vv --reason -sV -p {} --script=\"(nbstat or smb*) and not (brute or broadcast or dos or external or fuzzer)\" --script-args=unsafe=1 -oN \"{}/{}_smb_nmap.txt\" -oX \"{}/{}_smb_nmap.xml\" {}",
+            nmap_port, basedir, port, basedir, port, address
+        ),
+        format!(
+            "enum4linux -a -M -l -d {} | tee \"{}/{}_smb_enum4linux.txt\"",
+            address, basedir, port
+        ),
+        format!(
+            "python2 /usr/share/doc/python-impacket/examples/samrdump.py {} {}/SMB | tee \"{}/{}_smb_samrdump.txt\"",
+            address, port, basedir, port
+        ),
+        format!(
+            "nbtscan -rvh {} | tee \"{}/{}_smb_nbtscan.txt\"",
+            address, basedir, port
+        ),
+    ];
+
+    for cmd in &cmds {
+        Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .expect("Failed to execute command");
+    }
+}
+
+fn enum_mssql(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(ms-sql*) and not (brute or broadcast or dos or external or fuzzer)\" --script-args=mssql.instance-port={},mssql.username-sa,mssql.password-sa -oN \"{}/{}_mssql_nmap.txt\" -oX \"{}/{}_mssql_nmap.xml\" {}",
+        port, port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_mysql(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(mysql*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_mysql_nmap.txt\" -oX \"{}/{}_mysql_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_oracle(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(oracle*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_oracle_nmap.txt\" -oX \"{}/{}_oracle_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_nfs(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(rpcinfo or nfs*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_nfs_nmap.txt\" -oX \"{}/{}_nfs_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_snmp(address: &str, port: u16, basedir: &str) {
+    let cmds = vec![
+        format!(
+            "nmap -vv --reason -sV -p {} --script=\"(snmp*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_snmp_nmap.txt\" -oX \"{}/{}_snmp_nmap.xml\" {}",
+            port, basedir, port, basedir, port, address
+        ),
+        format!(
+            "onesixtyone -c data/community -dd -o \"{}/{}_snmp_onesixtyone.txt\" {}",
+            basedir, port, address
+        ),
+        format!(
+            "snmpwalk -c public -v 1 {} | tee \"{}/{}_snmp_snmpwalk.txt\"",
+            address, basedir, port
+        ),
+    ];
+
+    for cmd in &cmds {
+        Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .expect("Failed to execute command");
+    }
+}
+
+fn enum_dns(address: &str, port: u16, basedir: &str) {
+    let nmblookup_cmd = format!(
+        "nmblookup -A {} | grep '<00>' | grep -v '<GROUP>' | cut -d' ' -f1",
+        address
+    );
+
+    let host = match Command::new("sh")
+        .arg("-c")
+        .arg(&nmblookup_cmd)
+        .output()
+    {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+        Err(_) => return,
+    };
+
+    let cmd = format!(
+        "dig -p{} @{}.thinc.local thinc.local axfr > \"{}/{}_dns_dig.txt\"",
+        port, host, basedir, port
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_rdp(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(rdp*) and not (brute or broadcast or dos or external or fuzzer)\" -oN \"{}/{}_rdp_nmap.txt\" -oX \"{}/{}_rdp_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_vnc(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -p {} --script=\"(vnc* or realvnc*) and not (brute or broadcast or dos or external or fuzzer)\" --script-args=unsafe=1 -oN \"{}/{}_vnc_nmap.txt\" -oX \"{}/{}_vnc_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_generic_tcp(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -sC -p {} --script-args=unsafe=1 -oN \"{}/{}_generic_tcp_nmap.txt\" -oX \"{}/{}_generic_tcp_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
+}
+
+fn enum_generic_udp(address: &str, port: u16, basedir: &str) {
+    let cmd = format!(
+        "nmap -vv --reason -sV -sC -sU -p {} --script-args=unsafe=1 -oN \"{}/{}_generic_udp_nmap.txt\" -oX \"{}/{}_generic_udp_nmap.xml\" {}",
+        port, basedir, port, basedir, port, address
+    );
+
+    Command::new("sh")
+        .arg("-c")
+        .arg(&cmd)
+        .output()
+        .expect("Failed to execute command");
 }
 
 fn main() {
@@ -268,8 +511,28 @@ fn main() {
 
     for service in identified_services {
         println!("{:?}", service);
-        if service.2.contains("http") {
-            enum_http(&service.0, service.1.abs() as u16, &service.2, outdir);
+        match service.2.as_str() {
+            s if s.contains("http") => enum_http(&service.0, service.1.abs() as u16, &service.2, outdir),
+            s if s.contains("smtp") => enum_smtp(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("pop3") => enum_pop3(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("imap") => enum_imap(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("ftp") => enum_ftp(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("mssql") => enum_mssql(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("mysql") => enum_mysql(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("oracle") => enum_oracle(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("nfs") => enum_nfs(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("snmp") => enum_snmp(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("dns") => enum_dns(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("rdp") => enum_rdp(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("vnc") => enum_vnc(&service.0, service.1.abs() as u16, outdir),
+            s if s.contains("smb") => enum_smb(&service.0, service.1.abs() as u16, outdir),
+            _ => {
+                if service.1 > 0 {
+                    enum_generic_tcp(&service.0, service.1.abs() as u16, outdir);
+                } else {
+                    enum_generic_udp(&service.0, service.1.abs() as u16, outdir);
+                }
+            }
         }
     }
 }
