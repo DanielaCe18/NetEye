@@ -116,7 +116,7 @@ fn run_amap(services: Vec<(String, i32, String)>, only_unidentified: bool, outdi
 
     let cmds = if !ports_tcp.is_empty() || !ports_udp.is_empty() {
         let mut cmds = vec![];
-        if !ports_tcp.is_empty() {
+        if (!ports_tcp.is_empty()) {
             let ports = ports_tcp.trim_end_matches(',');
             cmds.push(format!("amap -A -bqv -m -o \"{}/0_tcp_amap.txt\" {} {}", out, services[0].0, ports));
         }
@@ -496,13 +496,19 @@ fn main() {
             .possible_values(&Protocol::variants())
             .takes_value(true)
             .required(true))
+        .arg(Arg::new("output")
+            .about("Directory to save the output")
+            .short('o')
+            .long("output")
+            .takes_value(true)
+            .required(true))
         .get_matches();
 
     let address = matches.value_of("address").unwrap();
     let ports = matches.value_of("ports").unwrap();
     let protocol: Protocol = matches.value_of_t("protocol").unwrap();
+    let outdir = matches.value_of("output").unwrap();
 
-    let outdir = "/path/to/output";
     let srvname = "_srv";
     let nmapparams = "-Pn";
 
