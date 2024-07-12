@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_xml_rs::from_reader;
 use std::path::Path;
 use clap::{Arg, App, ArgEnum};
+use regex::Regex;
 
 #[derive(Debug, Deserialize)]
 struct NmapService {
@@ -173,6 +174,57 @@ fn run_amap(services: Vec<(String, i32, String)>, only_unidentified: bool, outdi
     services
 }
 
+fn enum_http(address: &str, port: u16, service: &str, basedir: &str) {
+    let scheme = if service.contains("https") || service.contains("ssl") {
+        "https"
+    } else {
+        "http"
+    };
+    let nikto_ssl = if scheme == "https" { " -ssl" } else { "" };
+
+    let commands = vec![
+        format!(
+            "nmap -vv --reason -sV -p {} --script=\"(http* or ssl*) and not (broadcast or dos or external or http-slowloris* or fuzzer)\" -oN \"{}/{}_http_nmap.txt\" -oX \"{}/{}_http_nmap.xml\" {}",
+            port, basedir, port, basedir, port, address
+        ),
+        format!(
+            "curl -i {}://{}:{}/ -m 10 -o \"{}/{}_http_index.html\"",
+            scheme, address, port, basedir, port
+        ),
+        format!(
+            "curl -i {}://{}:{}/robots.txt -m 10 -o \"{}/{}_http_robots.txt\"",
+            scheme, address, port, basedir, port
+        ),
+    ];
+
+    for cmd in &commands {
+        Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .expect("Failed to execute command");
+    }
+
+    let second_stage_commands = vec![
+        format!(
+            "gobuster dir -w /usr/share/seclists/Discovery/Web_Content/common.txt -t 10 -u {}://{}:{}/ -e -s \"200,204,301,302,307,403,500\" | tee \"{}/{}_http_dirb.txt\"",
+            scheme, address, port, basedir, port
+        ),
+        format!(
+            "nikto -h {}://{}:{}{} -o \"{}/{}_http_nikto.txt\"",
+            scheme, address, port, nikto_ssl, basedir, port
+        ),
+    ];
+
+    for cmd in &second_stage_commands {
+        Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .expect("Failed to execute command");
+    }
+}
+
 #[derive(ArgEnum, Clone)]
 enum Protocol {
     Tcp,
@@ -216,5 +268,8 @@ fn main() {
 
     for service in identified_services {
         println!("{:?}", service);
+        if service.2.contains("http") {
+            enum_http(&service.0, service.1.abs() as u16, &service.2, outdir);
+        }
     }
 }
