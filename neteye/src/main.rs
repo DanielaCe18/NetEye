@@ -65,6 +65,10 @@ struct Opts {
     #[structopt(short = "U", long = "udp", help = "Enable UDP port scanning")]
     scan_udp: bool,
 
+    /// Inspect open ports
+    #[structopt(short = "i", long = "inspect", help = "Inspect open ports for more details")]
+    inspect: bool,
+
     /// Output file to save results
     #[structopt(short = "o", long = "output", help = "Output file to save results")]
     output: Option<String>,
@@ -96,11 +100,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if opts.scan_tcp {
-        scan_ports(&opts.address, opts.start_port, opts.end_port, timeout, threads, "tcp", file.clone()).await?;
+        scan_ports(&opts.address, opts.start_port, opts.end_port, timeout, threads, "tcp", file.clone(), opts.inspect).await?;
     }
 
     if opts.scan_udp {
-        scan_ports(&opts.address, opts.start_port, opts.end_port, timeout, threads, "udp", file.clone()).await?;
+        scan_ports(&opts.address, opts.start_port, opts.end_port, timeout, threads, "udp", file.clone(), opts.inspect).await?;
     }
 
     let elapsed = now.elapsed();
@@ -117,6 +121,7 @@ async fn scan_ports(
     threads: usize,
     protocol: &str,
     file: Option<Arc<Mutex<std::fs::File>>>,
+    inspect: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut ports_to_scan: Vec<u16> = vec![];
 
@@ -148,7 +153,7 @@ async fn scan_ports(
                     println!("{}", result);
                 }
 
-                if open {
+                if open && inspect {
                     if let Some(ref file) = file {
                         tokio::spawn(inspect_port(port, protocol.clone(), file.clone()));
                     }
@@ -190,16 +195,23 @@ async fn scan_udp_port(address: &str, port: u16, timeout: u64) -> bool {
 }
 
 async fn inspect_port(port: u16, protocol: String, file: Arc<Mutex<std::fs::File>>) {
-    let output = Command::new("lsof")
-        .arg(format!("-i:{}:{}", protocol, port))
-        .kill_on_drop(true)
-        .output()
-        .await;
+    let output = if cfg!(target_os = "windows") {
+        // On Windows, use netstat
+        Command::new("cmd")
+            .args(&["/C", &format!("netstat -ano | findstr :{}", port)])
+            .output()
+            .await
+    } else {
+        // On Unix-like systems, use lsof
+        Command::new("lsof")
+            .arg(format!("-i:{}:{}", protocol, port))
+            .output()
+            .await
+    };
 
-    let stdout = String::from_utf8_lossy(match &output {
-        Ok(output) => &output.stdout,
-        Err(_) => &[],
-    });
+    let output = output.unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
     println!("{}", stdout);
     let mut file = file.lock().unwrap();
     writeln!(file, "{}", stdout).expect("Failed to write to file");
