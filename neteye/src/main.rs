@@ -1,3 +1,5 @@
+mod pingcheck;
+
 use futures::stream::{self, StreamExt};
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -69,6 +71,10 @@ struct Opts {
     #[structopt(short = "i", long = "inspect", help = "Inspect open ports for more details")]
     inspect: bool,
 
+    /// Perform a ping check
+    #[structopt(short = "p", long = "ping-check", help = "Perform a ping check to the specified address")]
+    ping_check: bool,
+
     /// Output file to save results
     #[structopt(short = "o", long = "output", help = "Output file to save results")]
     output: Option<String>,
@@ -97,6 +103,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Address to scan: {:?}", opts.address);
         println!("Number of threads: {:?}", threads);
         println!("Timeout: {:?}ms", timeout);
+    }
+
+    if opts.ping_check {
+        let result = pingcheck::ping_check(&opts.address);
+        match result {
+            Ok(success) => {
+                if success {
+                    println!("Ping to {} succeeded!", opts.address);
+                } else {
+                    println!("Ping to {} failed!", opts.address);
+                }
+            },
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
     }
 
     if opts.scan_tcp {
