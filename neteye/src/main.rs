@@ -1,39 +1,41 @@
 use futures::stream::{self, StreamExt};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::num::{NonZeroU64, NonZeroUsize};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use structopt::StructOpt;
-use tokio::net::{TcpSocket, UdpSocket};
 use tokio::process::Command;
-use tokio::time;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "port-scan",
-    about = "A multi-threaded TCP/UDP port scanner and service detection utility."
+    about = "A multi-threaded TCP/UDP port scanner and service detection utility.",
+    no_version
 )]
 struct Opts {
     /// Name for reference
-    #[structopt(short = "n", long = "name", default_value = "default")]
+    #[structopt(short = "n", long = "name", default_value = "default", help = "Reference name for the scan")]
     name: String,
 
     /// Address to scan
-    #[structopt(short = "a", long = "address", default_value = "127.0.0.1")]
+    #[structopt(short = "a", long = "address", default_value = "127.0.0.1", help = "IP address or hostname to scan")]
     address: String,
 
     /// Print verbose output
-    #[structopt(short = "v", long = "verbose", help = "Print verbose output")]
+    #[structopt(short = "v", long = "verbose", help = "Print detailed output for the scan process")]
     verbose: bool,
 
     /// Number of threads to use
-    #[structopt(short = "j", long = "threads", help = "Number of threads to use")]
+    #[structopt(short = "j", long = "threads", help = "Number of threads to use for scanning")]
     threads: Option<NonZeroUsize>,
 
     /// Port to begin scanning from
     #[structopt(
         short = "s",
         long = "startPort",
-        help = "Port to start scanning from",
-        default_value = "1"
+        default_value = "1",
+        help = "Port number to start scanning from"
     )]
     start_port: u16,
 
@@ -41,27 +43,31 @@ struct Opts {
     #[structopt(
         short = "e",
         long = "endPort",
-        help = "Port to end scanning at",
-        default_value = "65535"
+        default_value = "65535",
+        help = "Port number to end scanning at"
     )]
     end_port: u16,
 
-    /// Number of seconds to wait before timing out on a port check (ms)
+    /// Number of milliseconds to wait before timing out on a port check
     #[structopt(
         short = "t",
         long = "timeout",
-        help = "Number of seconds to wait before timing out of a port check (ms).",
-        default_value = "3000"
+        default_value = "3000",
+        help = "Timeout in milliseconds for each port check"
     )]
     timeout: NonZeroU64,
 
     /// Scan TCP ports
-    #[structopt(short = "T", long = "tcp", help = "Scan TCP ports")]
+    #[structopt(short = "T", long = "tcp", help = "Enable TCP port scanning")]
     scan_tcp: bool,
 
     /// Scan UDP ports
-    #[structopt(short = "U", long = "udp", help = "Scan UDP ports")]
+    #[structopt(short = "U", long = "udp", help = "Enable UDP port scanning")]
     scan_udp: bool,
+
+    /// Output file to save results
+    #[structopt(short = "o", long = "output", help = "Output file to save results")]
+    output: Option<String>,
 }
 
 #[tokio::main]
@@ -76,6 +82,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .get();
     let timeout = opts.timeout.get();
 
+    let file = if let Some(output_file) = &opts.output {
+        Some(Arc::new(Mutex::new(OpenOptions::new().create(true).write(true).truncate(true).open(output_file)?)))
+    } else {
+        None
+    };
+
     if opts.verbose {
         println!("Name: {:?}", opts.name);
         println!("Address to scan: {:?}", opts.address);
@@ -84,25 +96,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if opts.scan_tcp {
-        scan_ports(opts.address.clone(), opts.start_port, opts.end_port, timeout, threads, "tcp").await?;
+        scan_ports(&opts.address, opts.start_port, opts.end_port, timeout, threads, "tcp", file.clone()).await?;
     }
 
     if opts.scan_udp {
-        scan_ports(opts.address, opts.start_port, opts.end_port, timeout, threads, "udp").await?;
+        scan_ports(&opts.address, opts.start_port, opts.end_port, timeout, threads, "udp", file.clone()).await?;
     }
 
     let elapsed = now.elapsed();
     println!("Time Elapsed: {:?}", elapsed);
+
     Ok(())
 }
 
 async fn scan_ports(
-    address: String,
+    address: &str,
     start_port: u16,
     end_port: u16,
     timeout: u64,
     threads: usize,
     protocol: &str,
+    file: Option<Arc<Mutex<std::fs::File>>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut ports_to_scan: Vec<u16> = vec![];
 
@@ -112,39 +126,55 @@ async fn scan_ports(
 
     let open_ports = stream::iter(ports_to_scan)
         .map(move |port| {
-            let address = address.clone();
+            let address = address.to_string();
+            let protocol = protocol.to_string();
+            let file = file.clone();
             async move {
-                let open = match protocol {
+                let open = match protocol.as_str() {
                     "tcp" => scan_tcp_port(&address, port, timeout).await,
                     "udp" => scan_udp_port(&address, port, timeout).await,
                     _ => false,
                 };
 
-                if open {
-                    println!("Port {} is open ({})", port, protocol);
+                let result = if open {
+                    format!("Port {} is open ({})", port, protocol)
                 } else if port == start_port || port == end_port {
-                    println!("Port {} is closed ({})", port, protocol);
+                    format!("Port {} is closed ({})", port, protocol)
+                } else {
+                    String::new()
+                };
+
+                if !result.is_empty() {
+                    println!("{}", result);
                 }
 
-                (port, open)
+                if open {
+                    if let Some(ref file) = file {
+                        tokio::spawn(inspect_port(port, protocol.clone(), file.clone()));
+                    }
+                }
+
+                if let Some(ref file) = file {
+                    let mut file = file.lock().unwrap();
+                    if !result.is_empty() {
+                        writeln!(file, "{}", result).expect("Failed to write to file");
+                    }
+                }
+
+                (port, open, result)
             }
         })
         .buffer_unordered(threads);
 
-    let results: Vec<(u16, bool)> = open_ports.collect().await;
-    for (port, open) in results {
-        if open {
-            inspect_port(port, protocol).await;
-        }
-    }
+    open_ports.for_each(|_| futures::future::ready(())).await;
 
     Ok(())
 }
 
 async fn scan_tcp_port(address: &str, port: u16, timeout: u64) -> bool {
     let addr = format!("{}:{}", address, port);
-    let socket = TcpSocket::new_v4().unwrap();
-    match time::timeout(time::Duration::from_millis(timeout), socket.connect(addr.parse().unwrap())).await {
+    let socket = tokio::net::TcpSocket::new_v4().unwrap();
+    match tokio::time::timeout(tokio::time::Duration::from_millis(timeout), socket.connect(addr.parse().unwrap())).await {
         Ok(Ok(_)) => true,
         _ => false,
     }
@@ -152,14 +182,14 @@ async fn scan_tcp_port(address: &str, port: u16, timeout: u64) -> bool {
 
 async fn scan_udp_port(address: &str, port: u16, timeout: u64) -> bool {
     let addr = format!("{}:{}", address, port);
-    let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    match time::timeout(time::Duration::from_millis(timeout), socket.send_to(&[0], &addr)).await {
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    match tokio::time::timeout(tokio::time::Duration::from_millis(timeout), socket.send_to(&[0], &addr)).await {
         Ok(Ok(_)) => true,
         _ => false,
     }
 }
 
-async fn inspect_port(port: u16, protocol: &str) {
+async fn inspect_port(port: u16, protocol: String, file: Arc<Mutex<std::fs::File>>) {
     let output = Command::new("lsof")
         .arg(format!("-i:{}:{}", protocol, port))
         .kill_on_drop(true)
@@ -171,4 +201,6 @@ async fn inspect_port(port: u16, protocol: &str) {
         Err(_) => &[],
     });
     println!("{}", stdout);
+    let mut file = file.lock().unwrap();
+    writeln!(file, "{}", stdout).expect("Failed to write to file");
 }

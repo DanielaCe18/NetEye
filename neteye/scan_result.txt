@@ -1,0 +1,5 @@
+Port 1 is closed (tcp)
+Port 53 is open (tcp)
+
+Port 80 is open (tcp)
+
