@@ -1,4 +1,5 @@
 mod pingcheck;
+mod shodan;
 
 use futures::stream::{self, StreamExt};
 use std::fs::OpenOptions;
@@ -13,71 +14,56 @@ use tokio::process::Command;
 #[structopt(
     name = "port-scan",
     about = "A multi-threaded TCP/UDP port scanner and service detection utility.",
-    no_version
+    global_settings = &[structopt::clap::AppSettings::UnifiedHelpMessage, structopt::clap::AppSettings::DisableVersion]
 )]
 struct Opts {
-    /// Name for reference
-    #[structopt(short = "n", long = "name", default_value = "default", help = "Reference name for the scan")]
-    name: String,
-
-    /// Address to scan
+    /// IP address or hostname to scan
     #[structopt(short = "a", long = "address", default_value = "127.0.0.1", help = "IP address or hostname to scan")]
     address: String,
 
-    /// Print verbose output
-    #[structopt(short = "v", long = "verbose", help = "Print detailed output for the scan process")]
-    verbose: bool,
-
-    /// Number of threads to use
-    #[structopt(short = "j", long = "threads", help = "Number of threads to use for scanning")]
-    threads: Option<NonZeroUsize>,
-
-    /// Port to begin scanning from
-    #[structopt(
-        short = "s",
-        long = "startPort",
-        default_value = "1",
-        help = "Port number to start scanning from"
-    )]
-    start_port: u16,
-
-    /// Port to end scanning at
-    #[structopt(
-        short = "e",
-        long = "endPort",
-        default_value = "65535",
-        help = "Port number to end scanning at"
-    )]
-    end_port: u16,
-
-    /// Number of milliseconds to wait before timing out on a port check
-    #[structopt(
-        short = "t",
-        long = "timeout",
-        default_value = "3000",
-        help = "Timeout in milliseconds for each port check"
-    )]
-    timeout: NonZeroU64,
-
-    /// Scan TCP ports
-    #[structopt(short = "T", long = "tcp", help = "Enable TCP port scanning")]
-    scan_tcp: bool,
-
-    /// Scan UDP ports
-    #[structopt(short = "U", long = "udp", help = "Enable UDP port scanning")]
-    scan_udp: bool,
-
-    /// Inspect open ports
+    /// Inspect open ports for more details
     #[structopt(short = "i", long = "inspect", help = "Inspect open ports for more details")]
     inspect: bool,
 
-    /// Perform a ping check
+    /// Perform a ping check to the specified address
     #[structopt(short = "p", long = "ping-check", help = "Perform a ping check to the specified address")]
     ping_check: bool,
+
+    /// Enable TCP port scanning
+    #[structopt(short = "T", long = "tcp", help = "Enable TCP port scanning")]
+    scan_tcp: bool,
+
+    /// Enable UDP port scanning
+    #[structopt(short = "U", long = "udp", help = "Enable UDP port scanning")]
+    scan_udp: bool,
+
+    /// Use Shodan to scan the specified address
+    #[structopt(short = "S", long = "shodan", help = "Use Shodan to scan the specified public address")]
+    shodan: bool,
+
+    /// Print detailed output for the scan process
+    #[structopt(short = "v", long = "verbose", help = "Print detailed output for the scan process")]
+    verbose: bool,
+
+    /// Port number to end scanning at
+    #[structopt(short = "e", long = "endPort", default_value = "65535", help = "Port number to end scanning at")]
+    end_port: u16,
 
     /// Output file to save results
     #[structopt(short = "o", long = "output", help = "Output file to save results")]
     output: Option<String>,
+
+    /// Port number to start scanning from
+    #[structopt(short = "s", long = "startPort", default_value = "1", help = "Port number to start scanning from")]
+    start_port: u16,
+
+    /// Number of threads to use for scanning
+    #[structopt(short = "j", long = "threads", help = "Number of threads to use for scanning")]
+    threads: Option<NonZeroUsize>,
+
+    /// Timeout in milliseconds for each port check
+    #[structopt(short = "t", long = "timeout", default_value = "3000", help = "Timeout in milliseconds for each port check")]
+    timeout: NonZeroU64,
 }
 
 #[tokio::main]
@@ -99,7 +85,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if opts.verbose {
-        println!("Name: {:?}", opts.name);
         println!("Address to scan: {:?}", opts.address);
         println!("Number of threads: {:?}", threads);
         println!("Timeout: {:?}ms", timeout);
@@ -120,6 +105,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::process::exit(1);
             }
         }
+    }
+
+    if opts.shodan {
+        tokio::task::block_in_place(|| {
+            shodan::shodan_scan(&opts.address).unwrap();
+        });
     }
 
     if opts.scan_tcp {
