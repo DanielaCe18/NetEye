@@ -1,8 +1,0 @@
-[dependencies]
-clap = "4.0.32"
-tokio = { version = "1", features = ["full"] }
-trust-dns-resolver = "0.21.0"
-[dependencies]
-clap = "4.0.32"
-tokio = { version = "1", features = ["full"] }
-trust-dns-resolver = "0.21.0"

@@ -30,7 +30,6 @@ struct ShodanError {
 fn get_host_info(client: &Client, ip: &str) -> Result<ShodanHost, Box<dyn Error>> {
     let url = format!("https://api.shodan.io/shodan/host/{}?key={}", ip, SHODAN_API_KEY);
     let response = client.get(&url).send()?.text()?; // Get the raw text response
-    println!("Raw response: {}", response); // Print the raw response for debugging
 
     // Check if the response contains an error
     if let Ok(shodan_error) = serde_json::from_str::<ShodanError>(&response) {
