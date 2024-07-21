@@ -1,0 +1,9 @@
+[package]
+name = "neteye"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+futures = "0.3"
+structopt = "0.3"
+tokio = { version = "1", features = ["full"] }
