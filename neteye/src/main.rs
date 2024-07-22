@@ -17,7 +17,43 @@ use tokio::time;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "port-scan",
+    name = "Neteye",
+    usage = "cargo run -- [OPTIONS]",
+    long_about = "
+A multi-threaded TCP/UDP port scanner and service detection utility integrated with Shodan.     
+                                                    
+                                     @@@@  @   @@@@                                         
+                                  @@    @@@@@@@@   @@                                      
+                                @@  @@@          @@  @@ @@                                 
+                               @  @@               @@  @  @@                               
+                           @  @  @       %@@@.       @  @   @@                             
+                         @@@ @@ @      @@     @@      @ @@    @@                           
+                        @@   @ @@     @  @@@@@  @-    @  @      @                          
+                      @@     @ @     @@ @   @@@  @     @ @       @@                        
+                     @@      @ @     @@ @@@@@@@  @     @ @        @@@@@                    
+                     @@      @ @@     @  @@@@@  @@    @  @        @@                       
+                       @@    @@ @      @@     @@      @ @@       @@                        
+                        @@    @  @       *@@@@       @  @      @@                          
+                          @@   @@ @@               @@  @     @@                            
+                            @@   @  @@@         @@@  @@    @@                              
+                              @@   @@   @@@@@@@   @@@  @@@                                 
+                                 @@   @@@@@*@@@@@    @@@@  @                               
+                                    @@@        :@@@@ @@  @@@@@                             
+                                                      @@@@@@@@@@                           
+                                                        @@@@@@@@@@                         
+                                                          @@@@@@@@@@                       
+                                           @                @@@@@@  @                      
+                                                              @@  @ @                      
+                                                                @@@@+                      
+                                                                                           
+                                                                                           
+                          @    @  @@@@  @@@@@  @@@@  @   @@ @@@@@                          
+                          @@@  @  @       @   @@     @@ @@  @                              
+                          @ @@@@  @@@@    @   @@@@@   @@@   @@@@@                          
+                          @:  @@  @       @   @@       @    @                              
+                          %    @   @@@    @     @@@   @@     @@@#                          
+                                                                                                                                                                                                                                  
+",
     about = "A multi-threaded TCP/UDP port scanner and service detection utility.",
     global_settings = &[structopt::clap::AppSettings::UnifiedHelpMessage, structopt::clap::AppSettings::DisableVersion]
 )]
@@ -26,13 +62,17 @@ struct Opts {
     #[structopt(short = "a", long = "address", default_value = "127.0.0.1", help = "IP address or hostname to scan")]
     address: String,
 
-    /// Inspect open ports for more details
-    #[structopt(short = "i", long = "inspect", help = "Inspect open ports for more details")]
-    inspect: bool,
-
     /// Perform a ping check to the specified address
     #[structopt(short = "p", long = "ping-check", help = "Perform a ping check to the specified address")]
     ping_check: bool,
+
+    /// Port number to start scanning from
+    #[structopt(short = "s", long = "startPort", default_value = "1", help = "Port number to start scanning from")]
+    start_port: u16,
+
+    /// Port number to end scanning at
+    #[structopt(short = "e", long = "endPort", default_value = "65535", help = "Port number to end scanning at")]
+    end_port: u16,
 
     /// Enable TCP port scanning
     #[structopt(short = "T", long = "tcp", help = "Enable TCP port scanning")]
@@ -42,25 +82,21 @@ struct Opts {
     #[structopt(short = "U", long = "udp", help = "Enable UDP port scanning")]
     scan_udp: bool,
 
-    /// Use Shodan to scan the specified address
-    #[structopt(short = "S", long = "shodan", help = "Use Shodan to scan the specified public address")]
-    shodan: bool,
-
     /// Print detailed output for the scan process
     #[structopt(short = "v", long = "verbose", help = "Print detailed output for the scan process")]
     verbose: bool,
 
-    /// Port number to end scanning at
-    #[structopt(short = "e", long = "endPort", default_value = "65535", help = "Port number to end scanning at")]
-    end_port: u16,
+    /// Inspect open ports for more details
+    #[structopt(short = "i", long = "inspect", help = "Inspect open ports for more details")]
+    inspect: bool,
+
+    /// Use Shodan to scan the specified address
+    #[structopt(short = "S", long = "shodan", help = "Use Shodan to scan the specified public address")]
+    shodan: bool,
 
     /// Output file to save results
     #[structopt(short = "o", long = "output", help = "Output file to save results")]
     output: Option<String>,
-
-    /// Port number to start scanning from
-    #[structopt(short = "s", long = "startPort", default_value = "1", help = "Port number to start scanning from")]
-    start_port: u16,
 
     /// Number of threads to use for scanning
     #[structopt(short = "j", long = "threads", help = "Number of threads to use for scanning")]
