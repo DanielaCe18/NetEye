@@ -165,32 +165,25 @@ async fn scan_ports(
                     _ => (false, String::new(), String::new()),
                 };
 
-                let result = if open {
-                    format!("{:<5} /{}   open     {:<15} {}", port, protocol, service, version)
-                } else {
-                    format!("{:<5} /{}   closed", port, protocol)
-                };
-
-                if !result.is_empty() {
+                if open {
+                    let result = format!("{:<5} /{}   open     {:<15} {}", port, protocol, service, version);
                     println!("{}", result);
-                }
 
-                if inspect && open {
                     if let Some(ref file) = file {
-                        tokio::spawn(inspect_port(port, protocol.clone(), Some(file.clone())));
-                    } else {
-                        inspect_port(port, protocol.clone(), file.clone()).await;
-                    }
-                }
-
-                if let Some(ref file) = file {
-                    let mut file = file.lock().unwrap();
-                    if !result.is_empty() {
+                        let mut file = file.lock().unwrap();
                         writeln!(file, "{}", result).expect("Failed to write to file");
                     }
+
+                    if inspect {
+                        if let Some(ref file) = file {
+                            tokio::spawn(inspect_port(port, protocol.clone(), Some(file.clone())));
+                        } else {
+                            inspect_port(port, protocol.clone(), file.clone()).await;
+                        }
+                    }
                 }
 
-                (port, open, result)
+                (port, open)
             }
         })
         .buffer_unordered(threads);
