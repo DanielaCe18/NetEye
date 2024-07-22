@@ -30,7 +30,7 @@ A multi-threaded TCP/UDP port scanner and service detection utility integrated w
                          @@@ @@ @      @@     @@      @ @@    @@                           
                         @@   @ @@     @  @@@@@  @-    @  @      @                          
                       @@     @ @     @@ @   @@@  @     @ @       @@                        
-                     @@      @ @     @@ @@@@@@@  @     @ @        @@@@@                    
+                     @@      @ @     @@ @@@@@@@  @     @ @        @@                    
                      @@      @ @@     @  @@@@@  @@    @  @        @@                       
                        @@    @@ @      @@     @@      @ @@       @@                        
                         @@    @  @       *@@@@       @  @      @@                          
@@ -194,6 +194,7 @@ async fn scan_ports(
             let address = address.to_string();
             let protocol = protocol.to_string();
             let file = file.clone();
+            let inspect = inspect;
             async move {
                 let (open, service, version) = match protocol.as_str() {
                     "tcp" => scan_tcp_port(&address, port, timeout).await,
@@ -211,8 +212,9 @@ async fn scan_ports(
                     }
 
                     if inspect {
+                        println!("Inspecting port: {}", port);
                         if let Some(ref file) = file {
-                            tokio::spawn(inspect_port(port, protocol.clone(), Some(file.clone())));
+                            inspect_port(port, protocol.clone(), Some(file.clone())).await;
                         } else {
                             inspect_port(port, protocol.clone(), file.clone()).await;
                         }
@@ -298,6 +300,7 @@ fn extract_version(response: &str) -> String {
 }
 
 async fn inspect_port(port: u16, protocol: String, file: Option<Arc<Mutex<std::fs::File>>>) {
+    println!("Running inspect_port for {} on {} protocol", port, protocol);
     let output = if cfg!(target_os = "windows") {
         // On Windows, use netstat
         Command::new("cmd")

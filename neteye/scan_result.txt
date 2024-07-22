@@ -1,0 +1,2 @@
+22    /tcp   open     ssh             SSH-2.0-OpenSSH_8.4p1 Debian-5
+80    /tcp   open     http            Server: Apache/2.4.48 (Debian)
