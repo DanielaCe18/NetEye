@@ -42,16 +42,16 @@ A multi-threaded TCP/UDP port scanner and service detection utility integrated w
                                                       @@@@@@@@@@                           
                                                         @@@@@@@@@@                         
                                                           @@@@@@@@@@                       
-                                           @                @@@@@@  @                      
+                                                           @@@@@@  @                      
                                                               @@  @ @                      
                                                                 @@@@+                      
                                                                                            
                                                                                            
                           @    @  @@@@  @@@@@  @@@@  @   @@ @@@@@                          
-                          @@@  @  @       @   @@     @@ @@  @                              
-                          @ @@@@  @@@@    @   @@@@@   @@@   @@@@@                          
-                          @:  @@  @       @   @@       @    @                              
-                          %    @   @@@    @     @@@   @@     @@@#                          
+                          @@   @  @       @    @     @   @  @                              
+                          @ @@ @  @@@@    @    @@@@   @@@   @@@@@                          
+                          @   @@  @       @    @       @    @                              
+                          @    @  @@@@    @    @@@@    @    @@@@@                          
                                                                                                                                                                                                                                   
 ",
     about = "A multi-threaded TCP/UDP port scanner and service detection utility.",
