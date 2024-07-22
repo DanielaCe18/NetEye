@@ -2,7 +2,7 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use std::error::Error;
 
-const SHODAN_API_KEY: &str = "YBOGrLQ2t6aIou6EtL2eryP6ntezdkpz";
+const SHODAN_API_KEY: &str = "YOUR_SHODAN_API_KEY";
 
 #[derive(Deserialize, Debug)]
 struct ShodanHost {
