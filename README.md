@@ -1,7 +1,10 @@
 
 # Neteye
 
-Neteye is a multi-threaded TCP/UDP port scanner and service detection utility integrated with Shodan, written entirely in Rust. This powerful and flexible network reconnaissance tool is designed for network security professionals and penetration testers. It stands out with its detailed banner-grabbing capabilities across various protocols and its integration with Shodan, the world's premier service for scanning and analyzing internet-connected devices.
+Neteye is a multi-threaded TCP/UDP port scanner and service detection utility integrated with Shodan, written entirely in Rust. This powerful and flexible network reconnaissance tool is designed for network security professionals and penetration testers.
+
+![image](https://github.com/user-attachments/assets/5715e821-4cf2-42ae-8e4e-4ac984b7a9c5)
+
 
 ## Features
 
@@ -122,6 +125,9 @@ Port        Status   Service           VERSION
 22    /tcp   open     ssh             SSH-2.0-OpenSSH_8.4p1 Debian-5
 80    /tcp   open     http            Server: Apache/2.4.48 (Debian)
 ```
+
+<img width="602" alt="image" src="https://github.com/user-attachments/assets/d4c953c3-9dc7-468a-a885-3c098b43c59d">
+
 
 ## Licensing
 
