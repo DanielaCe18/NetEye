@@ -4,11 +4,16 @@ mod shodan;
 use futures::stream::{self, StreamExt};
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::net::SocketAddr;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use structopt::StructOpt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
+use tokio::net::UdpSocket;
 use tokio::process::Command;
+use tokio::time;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -85,9 +90,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     if opts.verbose {
-        println!("Address to scan: {:?}", opts.address);
-        println!("Number of threads: {:?}", threads);
-        println!("Timeout: {:?}ms", timeout);
+        println!("Scanning target: {:?}", opts.address);
+        println!("Scanning IP    : {:?}", opts.address);
+        println!("Start-port     : {:?}", opts.start_port);
+        println!("End-port       : {:?}", opts.end_port);
+        println!("Threads        : {:?}", threads);
+        println!("Protocol       : {:?}", if opts.scan_tcp { "TCP" } else { "UDP" });
+        println!("---------------------------------------------");
+        println!("Port        Status   Service           VERSION");
     }
 
     if opts.ping_check {
@@ -149,27 +159,27 @@ async fn scan_ports(
             let protocol = protocol.to_string();
             let file = file.clone();
             async move {
-                let open = match protocol.as_str() {
+                let (open, service, version) = match protocol.as_str() {
                     "tcp" => scan_tcp_port(&address, port, timeout).await,
                     "udp" => scan_udp_port(&address, port, timeout).await,
-                    _ => false,
+                    _ => (false, String::new(), String::new()),
                 };
 
                 let result = if open {
-                    format!("Port {} is open ({})", port, protocol)
-                } else if port == start_port || port == end_port {
-                    format!("Port {} is closed ({})", port, protocol)
+                    format!("{:<5} /{}   open     {:<15} {}", port, protocol, service, version)
                 } else {
-                    String::new()
+                    format!("{:<5} /{}   closed", port, protocol)
                 };
 
                 if !result.is_empty() {
                     println!("{}", result);
                 }
 
-                if open && inspect {
+                if inspect && open {
                     if let Some(ref file) = file {
-                        tokio::spawn(inspect_port(port, protocol.clone(), file.clone()));
+                        tokio::spawn(inspect_port(port, protocol.clone(), Some(file.clone())));
+                    } else {
+                        inspect_port(port, protocol.clone(), file.clone()).await;
                     }
                 }
 
@@ -190,25 +200,75 @@ async fn scan_ports(
     Ok(())
 }
 
-async fn scan_tcp_port(address: &str, port: u16, timeout: u64) -> bool {
+async fn scan_tcp_port(address: &str, port: u16, timeout: u64) -> (bool, String, String) {
     let addr = format!("{}:{}", address, port);
-    let socket = tokio::net::TcpSocket::new_v4().unwrap();
-    match tokio::time::timeout(tokio::time::Duration::from_millis(timeout), socket.connect(addr.parse().unwrap())).await {
-        Ok(Ok(_)) => true,
-        _ => false,
+    match time::timeout(tokio::time::Duration::from_millis(timeout), TcpStream::connect(addr)).await {
+        Ok(Ok(mut stream)) => {
+            // Send a probe and read the response (simple banner grabbing)
+            let _ = stream.write_all(b"HEAD / HTTP/1.0\r\n\r\n").await;
+            let mut buffer = [0; 1024];
+            match stream.read(&mut buffer).await {
+                Ok(_) => {
+                    let response = String::from_utf8_lossy(&buffer).to_string();
+                    let (service, version) = identify_service_version(&response);
+                    (true, service, version)
+                }
+                Err(_) => (true, "unknown".to_string(), "unknown".to_string()),
+            }
+        }
+        _ => (false, String::new(), String::new()),
     }
 }
 
-async fn scan_udp_port(address: &str, port: u16, timeout: u64) -> bool {
-    let addr = format!("{}:{}", address, port);
-    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await.unwrap();
-    match tokio::time::timeout(tokio::time::Duration::from_millis(timeout), socket.send_to(&[0], &addr)).await {
-        Ok(Ok(_)) => true,
-        _ => false,
+async fn scan_udp_port(address: &str, port: u16, timeout: u64) -> (bool, String, String) {
+    let addr: SocketAddr = format!("{}:{}", address, port).parse().unwrap();
+    let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
+    let _ = socket.send_to(b"\n", &addr).await;
+    let mut buffer = [0; 1024];
+    match time::timeout(tokio::time::Duration::from_millis(timeout), socket.recv_from(&mut buffer)).await {
+        Ok(Ok((_, _))) => {
+            let response = String::from_utf8_lossy(&buffer).to_string();
+            let (service, version) = identify_service_version(&response);
+            (true, service, version)
+        }
+        _ => (false, String::new(), String::new()),
     }
 }
 
-async fn inspect_port(port: u16, protocol: String, file: Arc<Mutex<std::fs::File>>) {
+fn identify_service_version(response: &str) -> (String, String) {
+    if response.contains("SSH") {
+        ("ssh".to_string(), extract_version(response))
+    } else if response.contains("HTTP/1.1") || response.contains("HTTP/1.0") {
+        ("http".to_string(), extract_version(response))
+    } else if response.contains("HTTPS") || response.contains("SSL") {
+        ("https".to_string(), extract_version(response))
+    } else if response.contains("FTP") {
+        ("ftp".to_string(), extract_version(response))
+    } else if response.contains("SMTP") {
+        ("smtp".to_string(), extract_version(response))
+    } else if response.contains("IMAP") {
+        ("imap".to_string(), extract_version(response))
+    } else if response.contains("POP3") {
+        ("pop3".to_string(), extract_version(response))
+    } else if response.contains("Telnet") {
+        ("telnet".to_string(), extract_version(response))
+    } else if response.contains("DNS") {
+        ("dns".to_string(), extract_version(response))
+    } else {
+        ("unknown".to_string(), response.to_string())
+    }
+}
+
+fn extract_version(response: &str) -> String {
+    let lines: Vec<&str> = response.lines().collect();
+    if let Some(line) = lines.iter().find(|&&line| line.to_lowercase().contains("server:")) {
+        line.to_string()
+    } else {
+        response.lines().next().unwrap_or("").to_string()
+    }
+}
+
+async fn inspect_port(port: u16, protocol: String, file: Option<Arc<Mutex<std::fs::File>>>) {
     let output = if cfg!(target_os = "windows") {
         // On Windows, use netstat
         Command::new("cmd")
@@ -227,6 +287,8 @@ async fn inspect_port(port: u16, protocol: String, file: Arc<Mutex<std::fs::File
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     println!("{}", stdout);
-    let mut file = file.lock().unwrap();
-    writeln!(file, "{}", stdout).expect("Failed to write to file");
+    if let Some(file) = file {
+        let mut file = file.lock().unwrap();
+        writeln!(file, "{}", stdout).expect("Failed to write to file");
+    }
 }
