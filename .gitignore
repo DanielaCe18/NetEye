@@ -1,1 +1,34 @@
-/target
+# Ignore target directory
+/target/
+
+# Ignore build artifacts
+**/*.rs.bk
+
+# Ignore dependencies
+Cargo.lock
+*.rs.bk
+
+# Ignore editor-specific files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore temporary files
+*.tmp
+*.temp
+*.swp
+*.bak
+*.old
+*.orig
+*.log
+
+# Ignore Rust standard library doc files
+**/doc/
+
+# Ignore node_modules if you have a frontend setup
+node_modules/
